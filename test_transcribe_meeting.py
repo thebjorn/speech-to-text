@@ -7,12 +7,14 @@ Run with: pytest test_transcribe_meeting.py
 """
 
 import os
+import sys
 from collections import namedtuple
 
 import pytest
 
 from transcribe_meeting import (
     SpeakerTurn,
+    _add_ffmpeg_dll_directory,
     _build_diarization_pipeline,
     _load_dotenv,
     _parse_args,
@@ -198,3 +200,26 @@ class TestBuildDiarizationPipeline:
         monkeypatch.delenv('HUGGINGFACE_TOKEN', raising=False)
         with pytest.raises(RuntimeError):
             _build_diarization_pipeline()
+
+
+class TestAddFfmpegDllDirectory:
+    def test_noop_when_unset(self, monkeypatch):
+        monkeypatch.delenv('FFMPEG_BIN', raising=False)
+        before = os.environ.get('PATH')
+        _add_ffmpeg_dll_directory()  # must not raise
+        assert os.environ.get('PATH') == before
+
+    def test_noop_when_dir_missing(self, monkeypatch, tmp_path):
+        monkeypatch.setenv('FFMPEG_BIN', str(tmp_path / 'does-not-exist'))
+        before = os.environ.get('PATH')
+        _add_ffmpeg_dll_directory()
+        assert os.environ.get('PATH') == before
+
+    @pytest.mark.skipif(
+        sys.platform != 'win32', reason='os.add_dll_directory is Windows-only'
+    )
+    def test_prepends_existing_dir_to_path(self, monkeypatch, tmp_path):
+        monkeypatch.setenv('FFMPEG_BIN', str(tmp_path))
+        monkeypatch.setenv('PATH', 'C:\\already')
+        _add_ffmpeg_dll_directory()
+        assert os.environ['PATH'].startswith(str(tmp_path) + os.pathsep)

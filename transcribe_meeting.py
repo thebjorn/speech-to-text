@@ -144,6 +144,27 @@ def _add_cuda_dll_directories() -> None:
             os.add_dll_directory(str(bin_dir))
 
 
+def _add_ffmpeg_dll_directory() -> None:
+    """Make a shared-build FFmpeg discoverable for pyannote's torchcodec backend.
+
+    pyannote.audio decodes audio through torchcodec, which loads FFmpeg's shared
+    DLLs (``avcodec``/``avformat``/``avutil``/...) at runtime. When FFmpeg is not
+    already on ``PATH``, set the ``FFMPEG_BIN`` environment variable (e.g. in
+    ``.env``) to its ``bin`` directory and this registers it on the DLL search
+    path. No-op on non-Windows platforms and when ``FFMPEG_BIN`` is unset or does
+    not point at a directory.
+    """
+    if sys.platform != 'win32':
+        return
+
+    ffmpeg_bin = os.environ.get('FFMPEG_BIN')
+    if not ffmpeg_bin or not Path(ffmpeg_bin).is_dir():
+        return
+
+    os.add_dll_directory(ffmpeg_bin)
+    os.environ['PATH'] = ffmpeg_bin + os.pathsep + os.environ.get('PATH', '')
+
+
 def segments_to_text(segments: Iterable[Segment]) -> str:
     """Join segment texts into a newline-separated plain-text transcript."""
     return "\n".join(segment.text.strip() for segment in segments)
@@ -289,6 +310,9 @@ def _build_diarization_pipeline(hf_token: str | None = None):
             'HF_TOKEN or pass --hf-token, and accept the model terms at '
             'https://hf.co/pyannote/speaker-diarization-3.1'
         )
+
+    # pyannote decodes audio via torchcodec, which needs FFmpeg's shared DLLs.
+    _add_ffmpeg_dll_directory()
 
     import torch
     from pyannote.audio import Pipeline

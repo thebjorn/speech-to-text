@@ -154,9 +154,13 @@ installed (the default `pip install` of torch on Windows is CPU-only — see
 `--speakers N` improves accuracy.
 
 > **ffmpeg note:** pyannote decodes audio via `torchcodec`, which needs ffmpeg's
-> shared libraries. On Windows, install the **full-shared** ffmpeg build so the
-> DLLs are on your `PATH`; otherwise you'll see a `libtorchcodec` load error.
-> To download the models without decoding any audio, use `--prime`.
+> shared libraries — install the **full-shared** ffmpeg build (the one that
+> ships `avcodec-*.dll` etc.), not the static "essentials" build. Either put its
+> `bin` folder on your `PATH`, or set `FFMPEG_BIN` to that folder (e.g. in
+> `.env`) and the program registers the DLLs for you. Without it you'll see a
+> `libtorchcodec` load error. (Plain transcription doesn't need this — only
+> diarization does.) To download the models without decoding audio, use
+> `--prime`.
 
 ## Development
 
