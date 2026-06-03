@@ -1,0 +1,13 @@
+# Optional speaker diarization (who-spoke-when) with pyannote.audio.
+#
+# This pulls in PyTorch, which is a large download. For GPU diarization,
+# install a CUDA build of torch FIRST from https://pytorch.org/get-started/,
+# e.g. for CUDA 12.x:
+#     pip install torch --index-url https://download.pytorch.org/whl/cu124
+# then install this file.
+#
+# The pyannote/speaker-diarization-3.1 model is gated: accept its terms once at
+# https://hf.co/pyannote/speaker-diarization-3.1 and provide a Hugging Face
+# token (HF_TOKEN env var or the --hf-token flag).
+-r requirements.txt
+pyannote.audio>=3.1

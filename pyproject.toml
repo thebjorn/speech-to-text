@@ -19,6 +19,11 @@ gpu = [
     "nvidia-cublas-cu12",
     "nvidia-cudnn-cu12>=9.0,<10.0",
 ]
+# Speaker diarization (who-spoke-when). Pulls in PyTorch; the model is gated
+# on Hugging Face. See requirements-diarize.txt for GPU/token setup notes.
+diarize = [
+    "pyannote.audio>=3.1",
+]
 # Tooling for running the test suite.
 dev = [
     "pytest>=8.0",

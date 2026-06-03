@@ -22,6 +22,7 @@ them under ~/.cache/huggingface.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -59,6 +60,38 @@ class TranscriptionConfig:
     language: str = "no"
     beam_size: int = 5
     vad_filter: bool = True
+
+
+@dataclass(frozen=True)
+class SpeakerTurn:
+    """A contiguous span of audio attributed to one speaker by diarization.
+
+    Attributes:
+        start: Turn start time in seconds.
+        end: Turn end time in seconds.
+        speaker: Diarization label, e.g. ``"SPEAKER_00"``.
+    """
+
+    start: float
+    end: float
+    speaker: str
+
+
+@dataclass(frozen=True)
+class LabeledSegment:
+    """A transcription segment annotated with a speaker label.
+
+    Attributes:
+        start: Segment start time in seconds.
+        end: Segment end time in seconds.
+        text: The transcribed text (unmodified).
+        speaker: The speaker label assigned by :func:`assign_speakers`.
+    """
+
+    start: float
+    end: float
+    text: str
+    speaker: str
 
 
 def format_timestamp(seconds: float, *, use_comma: bool = False) -> str:
@@ -100,7 +133,6 @@ def _add_cuda_dll_directories() -> None:
         return
 
     import importlib.util
-    import os
 
     for package in ('nvidia.cublas', 'nvidia.cudnn'):
         spec = importlib.util.find_spec(package)
@@ -125,6 +157,73 @@ def segments_to_srt(segments: Iterable[Segment]) -> str:
         end = format_timestamp(segment.end, use_comma=True)
         blocks.append(f"{index}\n{start} --> {end}\n{segment.text.strip()}\n")
     return "\n".join(blocks)
+
+
+def _best_speaker(segment: Segment, turns: Iterable[SpeakerTurn]) -> str:
+    """Return the speaker whose turns overlap ``segment`` the most.
+
+    Overlap is summed across all turns for each speaker, so a segment that
+    straddles two short turns by the same speaker is attributed correctly.
+    Returns ``"UNKNOWN"`` when no turn overlaps the segment.
+    """
+    overlap_by_speaker: dict[str, float] = {}
+    for turn in turns:
+        overlap = min(segment.end, turn.end) - max(segment.start, turn.start)
+        if overlap > 0:
+            overlap_by_speaker[turn.speaker] = (
+                overlap_by_speaker.get(turn.speaker, 0.0) + overlap
+            )
+
+    if not overlap_by_speaker:
+        return 'UNKNOWN'
+
+    return max(overlap_by_speaker, key=overlap_by_speaker.get)
+
+
+def assign_speakers(
+    segments: Iterable[Segment],
+    turns: Iterable[SpeakerTurn],
+) -> list[LabeledSegment]:
+    """Attach a speaker label to each transcription segment.
+
+    Pure function: it only needs the start/end times of ``segments`` and
+    ``turns``, so it is unit-testable without faster-whisper or pyannote.
+
+    Args:
+        segments: Transcription segments, in time order.
+        turns: Diarization turns from :func:`diarize`.
+
+    Returns:
+        One :class:`LabeledSegment` per input segment, preserving order.
+    """
+    turns = list(turns)
+    return [
+        LabeledSegment(
+            start=segment.start,
+            end=segment.end,
+            text=segment.text,
+            speaker=_best_speaker(segment, turns),
+        )
+        for segment in segments
+    ]
+
+
+def labeled_segments_to_text(segments: Iterable[LabeledSegment]) -> str:
+    """Render labeled segments as ``SPEAKER: text`` lines."""
+    return '\n'.join(
+        f'{segment.speaker}: {segment.text.strip()}' for segment in segments
+    )
+
+
+def labeled_segments_to_srt(segments: Iterable[LabeledSegment]) -> str:
+    """Render labeled segments as SRT, prefixing each cue with the speaker."""
+    blocks = []
+    for index, segment in enumerate(segments, start=1):
+        start = format_timestamp(segment.start, use_comma=True)
+        end = format_timestamp(segment.end, use_comma=True)
+        text = f'{segment.speaker}: {segment.text.strip()}'
+        blocks.append(f'{index}\n{start} --> {end}\n{text}\n')
+    return '\n'.join(blocks)
 
 
 def transcribe(
@@ -167,8 +266,72 @@ def transcribe(
     # Segments is a lazy generator; materialize it so callers can iterate twice
     # (e.g. to write both .txt and .srt).
     return list(segments), info
-    # Diarization hook: to label speakers, run a pyannote.audio pipeline on the
-    # same file and align its speaker turns against these segment timestamps.
+
+
+def diarize(
+    audio_path: Path,
+    *,
+    hf_token: str | None = None,
+    num_speakers: int | None = None,
+) -> list[SpeakerTurn]:
+    """Detect who-spoke-when with a pyannote.audio diarization pipeline.
+
+    Like :func:`transcribe`, the heavy import is deferred so the rest of the
+    module (and its tests) work without pyannote or torch installed.
+
+    The ``pyannote/speaker-diarization-3.1`` model is gated on the Hugging Face
+    Hub: you must accept its conditions once at
+    https://hf.co/pyannote/speaker-diarization-3.1 and supply an access token,
+    either via ``hf_token`` or the ``HF_TOKEN`` / ``HUGGINGFACE_TOKEN``
+    environment variable.
+
+    Args:
+        audio_path: Path to an audio or video file readable by the pipeline.
+        hf_token: Hugging Face access token; falls back to the environment.
+        num_speakers: Exact number of speakers, if known. ``None`` lets the
+            pipeline estimate it.
+
+    Returns:
+        Speaker turns sorted by start time.
+
+    Raises:
+        FileNotFoundError: If ``audio_path`` does not exist.
+        RuntimeError: If no Hugging Face token can be found.
+    """
+    if not audio_path.exists():
+        raise FileNotFoundError(audio_path)
+
+    token = (
+        hf_token
+        or os.environ.get('HF_TOKEN')
+        or os.environ.get('HUGGINGFACE_TOKEN')
+    )
+    if not token:
+        raise RuntimeError(
+            'speaker diarization needs a Hugging Face access token; set '
+            'HF_TOKEN or pass --hf-token, and accept the model terms at '
+            'https://hf.co/pyannote/speaker-diarization-3.1'
+        )
+
+    import torch
+    from pyannote.audio import Pipeline
+
+    pipeline = Pipeline.from_pretrained(
+        'pyannote/speaker-diarization-3.1',
+        use_auth_token=token,
+    )
+
+    # Diarization is also much faster on the GPU when one is available.
+    if torch.cuda.is_available():
+        pipeline.to(torch.device('cuda'))
+
+    annotation = pipeline(str(audio_path), num_speakers=num_speakers)
+    turns = [
+        SpeakerTurn(start=turn.start, end=turn.end, speaker=speaker)
+        for turn, _, speaker in annotation.itertracks(yield_label=True)
+    ]
+    turns.sort(key=lambda turn: turn.start)
+    return turns
 
 
 def _write_outputs(
@@ -177,17 +340,25 @@ def _write_outputs(
     stem: str,
     output_dir: Path,
     fmt: str,
+    diarized: bool = False,
 ) -> list[Path]:
-    """Write the requested transcript formats and return the paths written."""
+    """Write the requested transcript formats and return the paths written.
+
+    When ``diarized`` is true, ``segments`` are :class:`LabeledSegment` values
+    and the speaker-aware renderers are used instead of the plain ones.
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
+    to_text = labeled_segments_to_text if diarized else segments_to_text
+    to_srt = labeled_segments_to_srt if diarized else segments_to_srt
+
     written: list[Path] = []
     if fmt in {"txt", "both"}:
         txt_path = output_dir / f"{stem}.txt"
-        txt_path.write_text(segments_to_text(segments), encoding="utf-8")
+        txt_path.write_text(to_text(segments), encoding="utf-8")
         written.append(txt_path)
     if fmt in {"srt", "both"}:
         srt_path = output_dir / f"{stem}.srt"
-        srt_path.write_text(segments_to_srt(segments), encoding="utf-8")
+        srt_path.write_text(to_srt(segments), encoding="utf-8")
         written.append(srt_path)
     return written
 
@@ -212,6 +383,22 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         default=None,
         help="Output directory (defaults to the input file's directory).",
+    )
+    parser.add_argument(
+        '--diarize',
+        action='store_true',
+        help='Label each segment by speaker using pyannote.audio.',
+    )
+    parser.add_argument(
+        '--hf-token',
+        default=None,
+        help='Hugging Face token for the diarization model (or set HF_TOKEN).',
+    )
+    parser.add_argument(
+        '--speakers',
+        type=int,
+        default=None,
+        help='Exact number of speakers, if known (default: auto-detect).',
     )
     return parser.parse_args(argv)
 
@@ -238,11 +425,29 @@ def main(argv: list[str] | None = None) -> int:
         print(f"detected language: {detected} ({probability:.0%})", file=sys.stderr)
 
     output_dir = args.output or args.audio.parent
+
+    if args.diarize:
+        try:
+            turns = diarize(
+                args.audio,
+                hf_token=args.hf_token,
+                num_speakers=args.speakers,
+            )
+        except RuntimeError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
+
+        speakers = {turn.speaker for turn in turns}
+        print(f"diarized {len(turns)} turns, {len(speakers)} speakers",
+              file=sys.stderr)
+        segments = assign_speakers(segments, turns)
+
     written = _write_outputs(
         segments,
         stem=args.audio.stem,
         output_dir=output_dir,
         fmt=args.format,
+        diarized=args.diarize,
     )
     for path in written:
         print(f"wrote {path}")

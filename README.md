@@ -40,6 +40,9 @@ Alternatively, using the project metadata in `pyproject.toml`:
 pip install -e ".[dev,gpu]"
 ```
 
+Speaker labels (diarization) are an optional extra with their own setup — see
+[Speaker labels](#speaker-labels-diarization) below.
+
 The first transcription run downloads the chosen model weights (`large-v3` is
 ~3 GB) and caches them under `~/.cache/huggingface`.
 
@@ -86,6 +89,9 @@ also available with the same arguments.
 | `--language`     | `no`        | ISO 639-1 language code (`no` = Norwegian bokmål).|
 | `--format`       | `txt`       | `txt`, `srt`, or `both`.                          |
 | `--output`       | input's dir | Output directory.                                 |
+| `--diarize`      | off         | Label each segment by speaker (see below).        |
+| `--hf-token`     | `$HF_TOKEN` | Hugging Face token for the diarization model.     |
+| `--speakers`     | auto        | Exact number of speakers, if known.               |
 
 ### Recommended for your hardware
 
@@ -96,6 +102,42 @@ comfortably:
 python transcribe_meeting.py meeting.m4a --model large-v3 --device cuda --compute-type float16
 ```
 
+## Speaker labels (diarization)
+
+With `--diarize`, the transcript is annotated with who spoke each line, using a
+[pyannote.audio](https://github.com/pyannote/pyannote-audio) pipeline that
+detects speaker turns. Each transcription segment is attributed to the speaker
+whose turns overlap it the most:
+
+```
+SPEAKER_00: God morgen, skal vi begynne?
+SPEAKER_01: Ja, la oss starte med budsjettet.
+```
+
+This is an opt-in feature with extra setup, because the model is large and
+gated:
+
+1. **Install the extra** (pulls in PyTorch — see `requirements-diarize.txt` for
+   the GPU/CUDA torch note):
+   ```powershell
+   pip install -r requirements-diarize.txt
+   # or: pip install -e ".[diarize]"
+   ```
+2. **Accept the model terms** once at
+   <https://hf.co/pyannote/speaker-diarization-3.1> (and the segmentation model
+   it depends on, linked from that page).
+3. **Provide a Hugging Face token** — create one at
+   <https://hf.co/settings/tokens>, then either set `HF_TOKEN` or pass
+   `--hf-token`:
+   ```powershell
+   $env:HF_TOKEN = "hf_..."
+   python transcribe_meeting.py meeting.m4a --diarize --format both
+   ```
+
+Diarization runs on the GPU automatically when a CUDA-enabled PyTorch is
+installed. If you know the number of participants, `--speakers N` improves
+accuracy.
+
 ## Development
 
 ```powershell
@@ -103,12 +145,8 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-The test suite (`test_transcribe_meeting.py`) covers the pure formatting helpers
-and runs **without** faster-whisper installed — the heavy model import is
-deferred into `transcribe()`.
-
-## Roadmap / ideas
-
-- **Speaker labels (diarization):** run a `pyannote.audio` pipeline on the same
-  file and align speaker turns against the segment timestamps. A hook for this
-  is noted in `transcribe()`.
+The test suite (`test_transcribe_meeting.py`) covers the pure helpers — timestamp
+formatting, transcript rendering, and speaker-to-segment alignment — and runs
+**without** faster-whisper, pyannote, or torch installed. The heavy model
+imports are deferred into `transcribe()` and `diarize()`, so the logic stays
+unit-testable.
