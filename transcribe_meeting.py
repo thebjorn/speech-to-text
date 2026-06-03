@@ -305,12 +305,47 @@ def transcribe(
 DIARIZATION_MODEL = 'pyannote/speaker-diarization-3.1'
 
 
-def _build_diarization_pipeline(hf_token: str | None = None):
-    """Load the pyannote diarization pipeline, on GPU when available.
+def _choose_diarization_device(requested: str, cuda_available: bool) -> str:
+    """Resolve the diarization torch device from the ``--device`` choice.
+
+    Pure (imports no torch) so it stays unit-testable. Returns ``'cuda'`` or
+    ``'cpu'``.
+
+    Args:
+        requested: ``'auto'``, ``'cpu'``, or ``'cuda'``.
+        cuda_available: Whether the installed torch reports CUDA support.
+
+    Raises:
+        RuntimeError: If ``'cuda'`` is requested but not available.
+    """
+    if requested == 'cpu':
+        return 'cpu'
+
+    if requested == 'cuda':
+        if not cuda_available:
+            raise RuntimeError(
+                'diarization requested --device cuda, but this PyTorch build '
+                'has no CUDA support. Install a CUDA build, e.g.: '
+                'pip install torch --index-url '
+                'https://download.pytorch.org/whl/cu124'
+            )
+        return 'cuda'
+
+    # 'auto': prefer the GPU when torch reports CUDA support.
+    return 'cuda' if cuda_available else 'cpu'
+
+
+def _build_diarization_pipeline(
+    hf_token: str | None = None,
+    device: str = 'auto',
+):
+    """Load the pyannote diarization pipeline on the chosen device.
 
     Resolves the Hugging Face token from ``hf_token`` or the environment, and
-    raises a clear error if none is set. Factored out so :func:`diarize` and
-    :func:`prime` construct (and thus download) the pipeline the same way.
+    raises a clear error if none is set. ``device`` is ``'auto'`` (GPU when a
+    CUDA torch is available, else CPU), ``'cpu'``, or ``'cuda'``. Factored out
+    so :func:`diarize` and :func:`prime` construct (and thus download) the
+    pipeline the same way.
     """
     token = (
         hf_token
@@ -339,9 +374,12 @@ def _build_diarization_pipeline(hf_token: str | None = None):
             DIARIZATION_MODEL, use_auth_token=token
         )
 
-    # Diarization is much faster on the GPU when one is available.
-    if torch.cuda.is_available():
-        pipeline.to(torch.device('cuda'))
+    resolved = _choose_diarization_device(device, torch.cuda.is_available())
+    print(f'diarization device: {resolved}', file=sys.stderr)
+    if resolved == 'cpu':
+        print('  (install a CUDA build of torch for faster diarization)',
+              file=sys.stderr)
+    pipeline.to(torch.device(resolved))
     return pipeline
 
 
@@ -350,6 +388,7 @@ def diarize(
     *,
     hf_token: str | None = None,
     num_speakers: int | None = None,
+    device: str = 'auto',
 ) -> list[SpeakerTurn]:
     """Detect who-spoke-when with a pyannote.audio diarization pipeline.
 
@@ -367,18 +406,21 @@ def diarize(
         hf_token: Hugging Face access token; falls back to the environment.
         num_speakers: Exact number of speakers, if known. ``None`` lets the
             pipeline estimate it.
+        device: ``'auto'`` (GPU when a CUDA torch is available, else CPU),
+            ``'cpu'``, or ``'cuda'``.
 
     Returns:
         Speaker turns sorted by start time.
 
     Raises:
         FileNotFoundError: If ``audio_path`` does not exist.
-        RuntimeError: If no Hugging Face token can be found.
+        RuntimeError: If no Hugging Face token can be found, or ``device`` is
+            ``'cuda'`` but the installed torch has no CUDA support.
     """
     if not audio_path.exists():
         raise FileNotFoundError(audio_path)
 
-    pipeline = _build_diarization_pipeline(hf_token)
+    pipeline = _build_diarization_pipeline(hf_token, device=device)
     result = pipeline(str(audio_path), num_speakers=num_speakers)
 
     # pyannote 4.x returns a DiarizeOutput wrapping the annotation; 3.x returns
@@ -418,7 +460,7 @@ def prime(
 
     if diarize:
         print('priming diarization pipeline...', file=sys.stderr)
-        _build_diarization_pipeline(hf_token)
+        _build_diarization_pipeline(hf_token, device=config.device)
 
 
 def _write_outputs(
@@ -574,6 +616,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.audio,
                 hf_token=args.hf_token,
                 num_speakers=args.speakers,
+                device=args.device,
             )
         except RuntimeError as error:
             print(f"error: {error}", file=sys.stderr)

@@ -16,6 +16,7 @@ from transcribe_meeting import (
     SpeakerTurn,
     _add_ffmpeg_dll_directory,
     _build_diarization_pipeline,
+    _choose_diarization_device,
     _load_dotenv,
     _parse_args,
     assign_speakers,
@@ -200,6 +201,24 @@ class TestBuildDiarizationPipeline:
         monkeypatch.delenv('HUGGINGFACE_TOKEN', raising=False)
         with pytest.raises(RuntimeError):
             _build_diarization_pipeline()
+
+
+class TestChooseDiarizationDevice:
+    def test_cpu_requested_stays_cpu_even_if_cuda_available(self):
+        assert _choose_diarization_device('cpu', True) == 'cpu'
+
+    def test_cuda_requested_and_available(self):
+        assert _choose_diarization_device('cuda', True) == 'cuda'
+
+    def test_cuda_requested_but_unavailable_raises(self):
+        with pytest.raises(RuntimeError):
+            _choose_diarization_device('cuda', False)
+
+    def test_auto_prefers_cuda_when_available(self):
+        assert _choose_diarization_device('auto', True) == 'cuda'
+
+    def test_auto_falls_back_to_cpu(self):
+        assert _choose_diarization_device('auto', False) == 'cpu'
 
 
 class TestAddFfmpegDllDirectory:

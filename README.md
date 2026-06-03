@@ -148,10 +148,19 @@ gated:
 
    Precedence is flag → shell env var → `.env` file.
 
-Diarization runs on the GPU automatically when a CUDA-enabled PyTorch is
-installed (the default `pip install` of torch on Windows is CPU-only — see
-`requirements-diarize.txt`). If you know the number of participants,
-`--speakers N` improves accuracy.
+Diarization honors `--device` (shared with transcription): `auto` (default)
+uses the GPU when a CUDA-enabled PyTorch is installed and falls back to CPU
+otherwise, `cuda` forces the GPU (and errors clearly if your torch has no CUDA
+support), and `cpu` forces CPU. The device it picked is printed to stderr. The
+default `pip install` of torch on Windows is CPU-only — install a CUDA build for
+GPU diarization (see `requirements-diarize.txt`):
+
+```powershell
+pip install torch --index-url https://download.pytorch.org/whl/cu124
+python transcribe_meeting.py meeting.m4a --diarize --device cuda
+```
+
+If you know the number of participants, `--speakers N` improves accuracy.
 
 > **ffmpeg note:** pyannote decodes audio via `torchcodec`, which needs ffmpeg's
 > shared libraries — install the **full-shared** ffmpeg build (the one that
