@@ -366,7 +366,11 @@ def diarize(
         raise FileNotFoundError(audio_path)
 
     pipeline = _build_diarization_pipeline(hf_token)
-    annotation = pipeline(str(audio_path), num_speakers=num_speakers)
+    result = pipeline(str(audio_path), num_speakers=num_speakers)
+
+    # pyannote 4.x returns a DiarizeOutput wrapping the annotation; 3.x returns
+    # the Annotation directly. Both expose itertracks().
+    annotation = getattr(result, 'speaker_diarization', result)
     turns = [
         SpeakerTurn(start=turn.start, end=turn.end, speaker=speaker)
         for turn, _, speaker in annotation.itertracks(yield_label=True)
