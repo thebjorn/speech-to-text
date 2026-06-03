@@ -134,14 +134,27 @@ def _add_cuda_dll_directories() -> None:
 
     import importlib.util
 
-    for package in ('nvidia.cublas', 'nvidia.cudnn'):
+    # ctranslate2 loads cuBLAS at runtime, which in turn needs the CUDA runtime
+    # (cudart) and nvrtc. Register each wheel's bin directory so the chain
+    # resolves without a system-wide CUDA install.
+    for package in (
+        'nvidia.cublas',
+        'nvidia.cuda_runtime',
+        'nvidia.cuda_nvrtc',
+        'nvidia.cudnn',
+    ):
         spec = importlib.util.find_spec(package)
         if spec is None or not spec.submodule_search_locations:
             continue
 
         bin_dir = Path(spec.submodule_search_locations[0]) / 'bin'
         if bin_dir.is_dir():
+            # add_dll_directory covers ctypes-based loads; ctranslate2's own
+            # loader searches PATH, so prepend the directory there too.
             os.add_dll_directory(str(bin_dir))
+            os.environ['PATH'] = (
+                str(bin_dir) + os.pathsep + os.environ.get('PATH', '')
+            )
 
 
 def _add_ffmpeg_dll_directory() -> None:

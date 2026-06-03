@@ -17,6 +17,8 @@ dependencies = [
 # GPU acceleration for NVIDIA cards (CUDA 12 + cuDNN 9).
 gpu = [
     "nvidia-cublas-cu12",
+    "nvidia-cuda-runtime-cu12",
+    "nvidia-cuda-nvrtc-cu12",
     "nvidia-cudnn-cu12>=9.0,<10.0",
 ]
 # Speaker diarization (who-spoke-when). Pulls in PyTorch; the model is gated
