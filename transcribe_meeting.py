@@ -268,6 +268,46 @@ def transcribe(
     return list(segments), info
 
 
+DIARIZATION_MODEL = 'pyannote/speaker-diarization-3.1'
+
+
+def _build_diarization_pipeline(hf_token: str | None = None):
+    """Load the pyannote diarization pipeline, on GPU when available.
+
+    Resolves the Hugging Face token from ``hf_token`` or the environment, and
+    raises a clear error if none is set. Factored out so :func:`diarize` and
+    :func:`prime` construct (and thus download) the pipeline the same way.
+    """
+    token = (
+        hf_token
+        or os.environ.get('HF_TOKEN')
+        or os.environ.get('HUGGINGFACE_TOKEN')
+    )
+    if not token:
+        raise RuntimeError(
+            'speaker diarization needs a Hugging Face access token; set '
+            'HF_TOKEN or pass --hf-token, and accept the model terms at '
+            'https://hf.co/pyannote/speaker-diarization-3.1'
+        )
+
+    import torch
+    from pyannote.audio import Pipeline
+
+    # The auth kwarg was renamed from use_auth_token to token in newer
+    # pyannote.audio / huggingface_hub releases; support both.
+    try:
+        pipeline = Pipeline.from_pretrained(DIARIZATION_MODEL, token=token)
+    except TypeError:
+        pipeline = Pipeline.from_pretrained(
+            DIARIZATION_MODEL, use_auth_token=token
+        )
+
+    # Diarization is much faster on the GPU when one is available.
+    if torch.cuda.is_available():
+        pipeline.to(torch.device('cuda'))
+    return pipeline
+
+
 def diarize(
     audio_path: Path,
     *,
@@ -301,30 +341,7 @@ def diarize(
     if not audio_path.exists():
         raise FileNotFoundError(audio_path)
 
-    token = (
-        hf_token
-        or os.environ.get('HF_TOKEN')
-        or os.environ.get('HUGGINGFACE_TOKEN')
-    )
-    if not token:
-        raise RuntimeError(
-            'speaker diarization needs a Hugging Face access token; set '
-            'HF_TOKEN or pass --hf-token, and accept the model terms at '
-            'https://hf.co/pyannote/speaker-diarization-3.1'
-        )
-
-    import torch
-    from pyannote.audio import Pipeline
-
-    pipeline = Pipeline.from_pretrained(
-        'pyannote/speaker-diarization-3.1',
-        use_auth_token=token,
-    )
-
-    # Diarization is also much faster on the GPU when one is available.
-    if torch.cuda.is_available():
-        pipeline.to(torch.device('cuda'))
-
+    pipeline = _build_diarization_pipeline(hf_token)
     annotation = pipeline(str(audio_path), num_speakers=num_speakers)
     turns = [
         SpeakerTurn(start=turn.start, end=turn.end, speaker=speaker)
@@ -332,6 +349,35 @@ def diarize(
     ]
     turns.sort(key=lambda turn: turn.start)
     return turns
+
+
+def prime(
+    config: TranscriptionConfig | None = None,
+    *,
+    diarize: bool = False,
+    hf_token: str | None = None,
+) -> None:
+    """Download and cache the model files so the first real run is fast.
+
+    Loads the configured Whisper model (which downloads its weights on first
+    use) and, when ``diarize`` is true, the pyannote diarization pipeline.
+    Nothing is transcribed; this only warms the on-disk model cache.
+    """
+    config = config or TranscriptionConfig()
+
+    print(f"priming whisper model '{config.model_size}'...", file=sys.stderr)
+    _add_cuda_dll_directories()
+    from faster_whisper import WhisperModel
+
+    WhisperModel(
+        config.model_size,
+        device=config.device,
+        compute_type=config.compute_type,
+    )
+
+    if diarize:
+        print('priming diarization pipeline...', file=sys.stderr)
+        _build_diarization_pipeline(hf_token)
 
 
 def _write_outputs(
@@ -367,7 +413,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Transcribe a Norwegian meeting recording locally.",
     )
-    parser.add_argument("audio", type=Path, help="Path to the audio/video file.")
+    parser.add_argument(
+        "audio",
+        type=Path,
+        nargs="?",
+        default=None,
+        help="Path to the audio/video file (omit when using --prime).",
+    )
     parser.add_argument("--model", default="large-v3", help="Whisper model size.")
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
     parser.add_argument("--compute-type", default="auto")
@@ -400,11 +452,46 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help='Exact number of speakers, if known (default: auto-detect).',
     )
+    parser.add_argument(
+        '--prime',
+        action='store_true',
+        help='Download and cache model files, then exit (no transcription).',
+    )
     return parser.parse_args(argv)
+
+
+def _load_dotenv(path: Path = Path('.env')) -> None:
+    """Populate ``os.environ`` from a ``.env`` file, if one is present.
+
+    Lines are ``KEY=value`` (an optional ``export`` prefix is allowed); blank
+    lines and ``#`` comments are skipped, and surrounding quotes are stripped.
+    Existing environment variables win, so a value exported in the shell takes
+    precedence over the file. This avoids a python-dotenv dependency for the
+    one common case: keeping HF_TOKEN out of your shell history and the repo.
+    """
+    if not path.is_file():
+        return
+
+    for raw_line in path.read_text(encoding='utf-8').splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith('#'):
+            continue
+        if line.startswith('export '):
+            line = line[len('export '):].strip()
+
+        key, separator, value = line.partition('=')
+        if not separator:
+            continue
+
+        key = key.strip()
+        value = value.strip().strip('\'"')
+        if key and key not in os.environ:
+            os.environ[key] = value
 
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point. Returns a process exit code."""
+    _load_dotenv()
     args = _parse_args(argv)
     config = TranscriptionConfig(
         model_size=args.model,
@@ -412,6 +499,20 @@ def main(argv: list[str] | None = None) -> int:
         compute_type=args.compute_type,
         language=args.language,
     )
+
+    if args.prime:
+        try:
+            prime(config, diarize=args.diarize, hf_token=args.hf_token)
+        except RuntimeError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
+        print("primed: model files are downloaded and cached")
+        return 0
+
+    if args.audio is None:
+        print("error: an audio file is required (or use --prime)",
+              file=sys.stderr)
+        return 2
 
     try:
         segments, info = transcribe(args.audio, config)

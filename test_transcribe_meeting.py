@@ -6,12 +6,16 @@ into transcribe(). A lightweight namedtuple stands in for a real Segment.
 Run with: pytest test_transcribe_meeting.py
 """
 
+import os
 from collections import namedtuple
 
 import pytest
 
 from transcribe_meeting import (
     SpeakerTurn,
+    _build_diarization_pipeline,
+    _load_dotenv,
+    _parse_args,
     assign_speakers,
     format_timestamp,
     labeled_segments_to_srt,
@@ -138,3 +142,59 @@ class TestLabeledRenderers:
             '1\n00:00:00,000 --> 00:00:01,000\nSPEAKER_00: God morgen.\n'
         )
         assert '\n2\n00:00:01,000 --> 00:00:02,000\nSPEAKER_01:' in result
+
+
+class TestLoadDotenv:
+    def test_loads_key_value(self, tmp_path, monkeypatch):
+        env_file = tmp_path / '.env'
+        env_file.write_text('HF_TOKEN=hf_secret\n', encoding='utf-8')
+        monkeypatch.delenv('HF_TOKEN', raising=False)
+        _load_dotenv(env_file)
+        assert os.environ['HF_TOKEN'] == 'hf_secret'
+
+    def test_skips_comments_and_strips_quotes_and_export(
+        self, tmp_path, monkeypatch
+    ):
+        env_file = tmp_path / '.env'
+        env_file.write_text(
+            '# a comment\n\nexport HF_TOKEN="hf_quoted"\n', encoding='utf-8'
+        )
+        monkeypatch.delenv('HF_TOKEN', raising=False)
+        _load_dotenv(env_file)
+        assert os.environ['HF_TOKEN'] == 'hf_quoted'
+
+    def test_does_not_override_existing(self, tmp_path, monkeypatch):
+        env_file = tmp_path / '.env'
+        env_file.write_text('HF_TOKEN=from_file\n', encoding='utf-8')
+        monkeypatch.setenv('HF_TOKEN', 'from_shell')
+        _load_dotenv(env_file)
+        assert os.environ['HF_TOKEN'] == 'from_shell'
+
+    def test_missing_file_is_noop(self, tmp_path):
+        _load_dotenv(tmp_path / 'nope.env')  # must not raise
+
+
+class TestArgs:
+    def test_prime_makes_audio_optional(self):
+        args = _parse_args(['--prime', '--model', 'tiny'])
+        assert args.prime is True
+        assert args.audio is None
+
+    def test_audio_is_positional(self):
+        args = _parse_args(['meeting.m4a'])
+        assert args.prime is False
+        assert str(args.audio) == 'meeting.m4a'
+
+    def test_diarize_flags_default_off(self):
+        args = _parse_args(['meeting.m4a'])
+        assert args.diarize is False
+        assert args.speakers is None
+        assert args.hf_token is None
+
+
+class TestBuildDiarizationPipeline:
+    def test_missing_token_raises_runtimeerror(self, monkeypatch):
+        monkeypatch.delenv('HF_TOKEN', raising=False)
+        monkeypatch.delenv('HUGGINGFACE_TOKEN', raising=False)
+        with pytest.raises(RuntimeError):
+            _build_diarization_pipeline()

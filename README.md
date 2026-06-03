@@ -74,6 +74,10 @@ python transcribe_meeting.py meeting.m4a --format both --output transcripts/
 
 # Force CPU with an int8 model (smaller, faster on CPU)
 python transcribe_meeting.py meeting.mp3 --model medium --device cpu --compute-type int8
+
+# Pre-download/cache the models ahead of time (no audio needed)
+python transcribe_meeting.py --prime --model large-v3
+python transcribe_meeting.py --prime --model large-v3 --diarize
 ```
 
 If installed with `pip install -e .`, a `transcribe-meeting` console command is
@@ -92,6 +96,7 @@ also available with the same arguments.
 | `--diarize`      | off         | Label each segment by speaker (see below).        |
 | `--hf-token`     | `$HF_TOKEN` | Hugging Face token for the diarization model.     |
 | `--speakers`     | auto        | Exact number of speakers, if known.               |
+| `--prime`        | off         | Download/cache the models, then exit (no audio).  |
 
 ### Recommended for your hardware
 
@@ -126,17 +131,32 @@ gated:
 2. **Accept the model terms** once at
    <https://hf.co/pyannote/speaker-diarization-3.1> (and the segmentation model
    it depends on, linked from that page).
-3. **Provide a Hugging Face token** — create one at
-   <https://hf.co/settings/tokens>, then either set `HF_TOKEN` or pass
-   `--hf-token`:
+3. **Provide a Hugging Face token** (needs only **read** access) — create one
+   at <https://hf.co/settings/tokens>. Supply it in any of these ways:
+   - a `.env` file in the project directory (copy `.env.example` → `.env`; it's
+     gitignored, so the token stays out of the repo):
+     ```
+     HF_TOKEN=hf_...
+     ```
+   - a shell environment variable: `$env:HF_TOKEN = "hf_..."`
+   - the `--hf-token hf_...` flag
+
+   Then:
    ```powershell
-   $env:HF_TOKEN = "hf_..."
    python transcribe_meeting.py meeting.m4a --diarize --format both
    ```
 
+   Precedence is flag → shell env var → `.env` file.
+
 Diarization runs on the GPU automatically when a CUDA-enabled PyTorch is
-installed. If you know the number of participants, `--speakers N` improves
-accuracy.
+installed (the default `pip install` of torch on Windows is CPU-only — see
+`requirements-diarize.txt`). If you know the number of participants,
+`--speakers N` improves accuracy.
+
+> **ffmpeg note:** pyannote decodes audio via `torchcodec`, which needs ffmpeg's
+> shared libraries. On Windows, install the **full-shared** ffmpeg build so the
+> DLLs are on your `PATH`; otherwise you'll see a `libtorchcodec` load error.
+> To download the models without decoding any audio, use `--prime`.
 
 ## Development
 

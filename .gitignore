@@ -1,3 +1,8 @@
+# Secrets / local environment — never commit the real Hugging Face token.
+.env
+.env.*
+!.env.example
+
 # Virtual environments
 .venv/
 venv/
