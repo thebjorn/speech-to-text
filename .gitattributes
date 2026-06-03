@@ -1,0 +1,17 @@
+# Normalize line endings across platforms: store text as LF in the repo and
+# check it out as LF, so Windows/macOS/Linux agree and Git stops warning about
+# LF<->CRLF conversion (overrides a global core.autocrlf=true).
+* text=auto eol=lf
+
+# Windows shell scripts must keep CRLF to run correctly.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Audio/video and other binaries: never apply text conversion.
+*.m4a  binary
+*.mp3  binary
+*.mp4  binary
+*.wav  binary
+*.flac binary
+*.ogg  binary
