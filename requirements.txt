@@ -1,0 +1,6 @@
+# Core runtime dependency.
+#
+# faster-whisper pulls in ctranslate2 (the inference engine), tokenizers, and
+# huggingface-hub (used to download the model weights on first run). It does
+# NOT pull in torch, which keeps the install small.
+faster-whisper>=1.1.0

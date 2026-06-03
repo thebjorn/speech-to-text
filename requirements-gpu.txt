@@ -1,0 +1,11 @@
+# Optional GPU acceleration for NVIDIA cards (CUDA 12 + cuDNN 9).
+#
+# ctranslate2 loads these CUDA runtime libraries when a CUDA device is selected.
+# Installing them as wheels avoids needing a system-wide CUDA Toolkit / cuDNN
+# install. On Windows, transcribe_meeting.py registers their DLL directories
+# automatically (see _add_cuda_dll_directories).
+#
+# Install with: pip install -r requirements-gpu.txt
+-r requirements.txt
+nvidia-cublas-cu12
+nvidia-cudnn-cu12>=9.0,<10.0

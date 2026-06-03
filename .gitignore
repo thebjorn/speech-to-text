@@ -1,0 +1,30 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python bytecode and tool caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# Whisper model weights are large (~3 GB for large-v3) and re-downloadable.
+# The default cache lives under ~/.cache/huggingface; ignore a local one too.
+models/
+.cache/
+
+# Meeting recordings — keep audio/video inputs out of version control.
+*.m4a
+*.mp3
+*.mp4
+*.wav
+*.flac
+*.ogg
+
+# Generated transcripts
+/transcripts/
+/output/
+*.srt
