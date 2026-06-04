@@ -421,7 +421,20 @@ def diarize(
         raise FileNotFoundError(audio_path)
 
     pipeline = _build_diarization_pipeline(hf_token, device=device)
-    result = pipeline(str(audio_path), num_speakers=num_speakers)
+
+    # Decode to a 16 kHz mono waveform with PyAV (faster-whisper's decoder) and
+    # hand it to pyannote directly, rather than letting pyannote open the file.
+    # PyAV decodes every container consistently (mp3/m4a/opus/flac/wav), and
+    # this avoids torchcodec quirks -- notably MP3 decoding returning a slightly
+    # off sample count, which trips pyannote's strict chunk extraction.
+    import torch
+    from faster_whisper.audio import decode_audio
+
+    waveform = torch.from_numpy(decode_audio(str(audio_path))).unsqueeze(0)
+    result = pipeline(
+        {'waveform': waveform, 'sample_rate': 16000},
+        num_speakers=num_speakers,
+    )
 
     # pyannote 4.x returns a DiarizeOutput wrapping the annotation; 3.x returns
     # the Annotation directly. Both expose itertracks().

@@ -156,7 +156,10 @@ default `pip install` of torch on Windows is CPU-only — install a CUDA build f
 GPU diarization (see `requirements-diarize.txt`):
 
 ```powershell
-pip install torch --index-url https://download.pytorch.org/whl/cu124
+# pyannote 4.x needs torch >= 2.12, which is on the cu126 index (NOT cu124 --
+# that tops out at torch 2.6, too old). Your NVIDIA driver must support
+# CUDA 12.6+ (check nvidia-smi).
+pip install torch==2.12.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu126
 python transcribe_meeting.py meeting.m4a --diarize --device cuda
 ```
 

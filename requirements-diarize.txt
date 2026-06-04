@@ -1,9 +1,15 @@
 # Optional speaker diarization (who-spoke-when) with pyannote.audio.
 #
-# This pulls in PyTorch, which is a large download. For GPU diarization,
-# install a CUDA build of torch FIRST from https://pytorch.org/get-started/,
-# e.g. for CUDA 12.x:
-#     pip install torch --index-url https://download.pytorch.org/whl/cu124
+# This pulls in PyTorch, which is a large download. The default `pip install`
+# of torch on Windows is CPU-only (diarization then runs on CPU, which works
+# but is slow). For GPU diarization, install a CUDA build of torch FIRST.
+#
+# IMPORTANT: pyannote 4.x needs a recent torch (>= 2.12, via torchcodec). That
+# torch ships on the cu126 index, NOT cu124 (cu124 tops out at torch 2.6, which
+# is too old and breaks the stack). So install from cu126 and make sure your
+# NVIDIA driver supports CUDA 12.6+ (check `nvidia-smi`):
+#     pip install torch==2.12.0 torchaudio==2.11.0 \
+#         --index-url https://download.pytorch.org/whl/cu126
 # then install this file.
 #
 # The pyannote/speaker-diarization-3.1 model is gated: accept its terms once at
