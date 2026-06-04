@@ -97,6 +97,7 @@ also available with the same arguments.
 | `--hf-token`     | `$HF_TOKEN` | Hugging Face token for the diarization model.     |
 | `--speakers`     | auto        | Exact number of speakers, if known.               |
 | `--prime`        | off         | Download/cache the models, then exit (no audio).  |
+| `--timestamps`   | off         | Prefix each `.txt` line with a `[HH:MM:SS]` time.  |
 
 ### Recommended for your hardware
 
@@ -112,12 +113,17 @@ python transcribe_meeting.py meeting.m4a --model large-v3 --device cuda --comput
 With `--diarize`, the transcript is annotated with who spoke each line, using a
 [pyannote.audio](https://github.com/pyannote/pyannote-audio) pipeline that
 detects speaker turns. Each transcription segment is attributed to the speaker
-whose turns overlap it the most:
+whose turns overlap it the most, and consecutive turns by the same speaker are
+merged into one paragraph in the `.txt`. With `--timestamps`, each paragraph is
+prefixed with its `[HH:MM:SS]` start time:
 
 ```
-SPEAKER_00: God morgen, skal vi begynne?
-SPEAKER_01: Ja, la oss starte med budsjettet.
+[00:00:00] SPEAKER_00: God morgen, skal vi begynne?
+[00:00:04] SPEAKER_01: Ja, la oss starte med budsjettet. Først tallene fra i fjor.
 ```
+
+(The `.srt` keeps one cue per segment — subtitles need fine-grained timing — so
+merging applies only to the `.txt`.)
 
 This is an opt-in feature with extra setup, because the model is large and
 gated:

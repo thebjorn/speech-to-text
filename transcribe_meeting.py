@@ -118,6 +118,11 @@ def format_timestamp(seconds: float, *, use_comma: bool = False) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d}{separator}{milliseconds:03d}"
 
 
+def _clock(seconds: float) -> str:
+    """Format ``seconds`` as a bare ``HH:MM:SS`` clock (no milliseconds)."""
+    return format_timestamp(seconds)[:8]
+
+
 def _add_cuda_dll_directories() -> None:
     """Make pip-installed NVIDIA CUDA libraries loadable on Windows.
 
@@ -178,9 +183,20 @@ def _add_ffmpeg_dll_directory() -> None:
     os.environ['PATH'] = ffmpeg_bin + os.pathsep + os.environ.get('PATH', '')
 
 
-def segments_to_text(segments: Iterable[Segment]) -> str:
-    """Join segment texts into a newline-separated plain-text transcript."""
-    return "\n".join(segment.text.strip() for segment in segments)
+def segments_to_text(
+    segments: Iterable[Segment],
+    *,
+    timestamps: bool = False,
+) -> str:
+    """Join segment texts into a newline-separated plain-text transcript.
+
+    With ``timestamps``, each line is prefixed with a ``[HH:MM:SS]`` start time.
+    """
+    lines = []
+    for segment in segments:
+        prefix = f"[{_clock(segment.start)}] " if timestamps else ""
+        lines.append(f"{prefix}{segment.text.strip()}")
+    return "\n".join(lines)
 
 
 def segments_to_srt(segments: Iterable[Segment]) -> str:
@@ -242,11 +258,52 @@ def assign_speakers(
     ]
 
 
-def labeled_segments_to_text(segments: Iterable[LabeledSegment]) -> str:
-    """Render labeled segments as ``SPEAKER: text`` lines."""
-    return '\n'.join(
-        f'{segment.speaker}: {segment.text.strip()}' for segment in segments
-    )
+def merge_consecutive_speakers(
+    segments: Iterable[LabeledSegment],
+) -> list[LabeledSegment]:
+    """Merge consecutive same-speaker labeled segments into one block each.
+
+    Pure. Each returned :class:`LabeledSegment` spans one speaker's run of
+    consecutive turns: ``start``/``end`` cover the run and ``text`` is the
+    turns joined with a space. This turns one-line-per-segment output into
+    readable per-speaker paragraphs.
+    """
+    merged: list[LabeledSegment] = []
+    for segment in segments:
+        if merged and merged[-1].speaker == segment.speaker:
+            previous = merged[-1]
+            merged[-1] = LabeledSegment(
+                start=previous.start,
+                end=segment.end,
+                text=f'{previous.text} {segment.text.strip()}',
+                speaker=previous.speaker,
+            )
+        else:
+            merged.append(
+                LabeledSegment(
+                    start=segment.start,
+                    end=segment.end,
+                    text=segment.text.strip(),
+                    speaker=segment.speaker,
+                )
+            )
+    return merged
+
+
+def labeled_segments_to_text(
+    segments: Iterable[LabeledSegment],
+    *,
+    timestamps: bool = False,
+) -> str:
+    """Render labeled segments as ``SPEAKER: text`` lines.
+
+    With ``timestamps``, each line is prefixed with a ``[HH:MM:SS]`` start time.
+    """
+    lines = []
+    for segment in segments:
+        prefix = f'[{_clock(segment.start)}] ' if timestamps else ''
+        lines.append(f'{prefix}{segment.speaker}: {segment.text.strip()}')
+    return '\n'.join(lines)
 
 
 def labeled_segments_to_srt(segments: Iterable[LabeledSegment]) -> str:
@@ -483,24 +540,36 @@ def _write_outputs(
     output_dir: Path,
     fmt: str,
     diarized: bool = False,
+    timestamps: bool = False,
 ) -> list[Path]:
     """Write the requested transcript formats and return the paths written.
 
-    When ``diarized`` is true, ``segments`` are :class:`LabeledSegment` values
-    and the speaker-aware renderers are used instead of the plain ones.
+    When ``diarized`` is true, ``segments`` are :class:`LabeledSegment` values:
+    the ``.txt`` merges consecutive same-speaker turns into per-speaker
+    paragraphs, while the ``.srt`` keeps one cue per segment (subtitles need
+    fine-grained timing). ``timestamps`` prefixes each ``.txt`` line with a
+    ``[HH:MM:SS]`` start time.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
-    to_text = labeled_segments_to_text if diarized else segments_to_text
-    to_srt = labeled_segments_to_srt if diarized else segments_to_srt
 
     written: list[Path] = []
     if fmt in {"txt", "both"}:
+        if diarized:
+            text = labeled_segments_to_text(
+                merge_consecutive_speakers(segments), timestamps=timestamps
+            )
+        else:
+            text = segments_to_text(segments, timestamps=timestamps)
         txt_path = output_dir / f"{stem}.txt"
-        txt_path.write_text(to_text(segments), encoding="utf-8")
+        txt_path.write_text(text, encoding="utf-8")
         written.append(txt_path)
     if fmt in {"srt", "both"}:
+        if diarized:
+            srt = labeled_segments_to_srt(segments)
+        else:
+            srt = segments_to_srt(segments)
         srt_path = output_dir / f"{stem}.srt"
-        srt_path.write_text(to_srt(segments), encoding="utf-8")
+        srt_path.write_text(srt, encoding="utf-8")
         written.append(srt_path)
     return written
 
@@ -552,6 +621,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         '--prime',
         action='store_true',
         help='Download and cache model files, then exit (no transcription).',
+    )
+    parser.add_argument(
+        '--timestamps',
+        action='store_true',
+        help='Prefix each transcript line with a [HH:MM:SS] start time.',
     )
     return parser.parse_args(argv)
 
@@ -646,6 +720,7 @@ def main(argv: list[str] | None = None) -> int:
         output_dir=output_dir,
         fmt=args.format,
         diarized=args.diarize,
+        timestamps=args.timestamps,
     )
     for path in written:
         print(f"wrote {path}")

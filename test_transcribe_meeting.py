@@ -13,6 +13,7 @@ from collections import namedtuple
 import pytest
 
 from transcribe_meeting import (
+    LabeledSegment,
     SpeakerTurn,
     _add_ffmpeg_dll_directory,
     _build_diarization_pipeline,
@@ -23,6 +24,7 @@ from transcribe_meeting import (
     format_timestamp,
     labeled_segments_to_srt,
     labeled_segments_to_text,
+    merge_consecutive_speakers,
     segments_to_srt,
     segments_to_text,
 )
@@ -60,6 +62,10 @@ class TestSegmentsToText:
 
     def test_empty(self):
         assert segments_to_text([]) == ""
+
+    def test_timestamps_prefix(self):
+        segments = [FakeSegment(61.0, 62.0, "Hallo.")]
+        assert segments_to_text(segments, timestamps=True) == "[00:01:01] Hallo."
 
 
 class TestSegmentsToSrt:
@@ -145,6 +151,43 @@ class TestLabeledRenderers:
             '1\n00:00:00,000 --> 00:00:01,000\nSPEAKER_00: God morgen.\n'
         )
         assert '\n2\n00:00:01,000 --> 00:00:02,000\nSPEAKER_01:' in result
+
+    def test_labeled_text_timestamps(self):
+        result = labeled_segments_to_text(self._labeled(), timestamps=True)
+        assert result.startswith('[00:00:00] SPEAKER_00: God morgen.')
+
+
+class TestMergeConsecutiveSpeakers:
+    def test_merges_runs_and_splits_on_change(self):
+        segments = assign_speakers(
+            [
+                FakeSegment(0.0, 1.0, 'God morgen.'),
+                FakeSegment(1.0, 2.0, 'Skal vi begynne?'),
+                FakeSegment(2.0, 3.0, 'Ja.'),
+            ],
+            [
+                SpeakerTurn(0.0, 2.0, 'SPEAKER_00'),
+                SpeakerTurn(2.0, 3.0, 'SPEAKER_01'),
+            ],
+        )
+        merged = merge_consecutive_speakers(segments)
+        assert len(merged) == 2
+        assert merged[0].speaker == 'SPEAKER_00'
+        assert merged[0].text == 'God morgen. Skal vi begynne?'
+        assert (merged[0].start, merged[0].end) == (0.0, 2.0)
+        assert merged[1].speaker == 'SPEAKER_01'
+        assert merged[1].text == 'Ja.'
+
+    def test_empty(self):
+        assert merge_consecutive_speakers([]) == []
+
+    def test_no_merge_when_speakers_alternate(self):
+        segments = [
+            LabeledSegment(0.0, 1.0, 'A.', 'SPEAKER_00'),
+            LabeledSegment(1.0, 2.0, 'B.', 'SPEAKER_01'),
+        ]
+        merged = merge_consecutive_speakers(segments)
+        assert [m.text for m in merged] == ['A.', 'B.']
 
 
 class TestLoadDotenv:
