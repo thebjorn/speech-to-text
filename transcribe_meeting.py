@@ -32,8 +32,8 @@ from typing import Iterable, Protocol
 class Segment(Protocol):
     """Minimal structural type for a transcription segment.
 
-    faster-whisper's own ``Segment`` satisfies this, and tests can pass any
-    lightweight object exposing the same three attributes.
+       faster-whisper's own ``Segment`` satisfies this, and tests can pass any
+       lightweight object exposing the same three attributes.
     """
 
     start: float
@@ -45,13 +45,13 @@ class Segment(Protocol):
 class TranscriptionConfig:
     """Runtime configuration for a transcription run.
 
-    Attributes:
-        model_size: Whisper model identifier, e.g. ``"large-v3"``, ``"medium"``.
-        device: ``"auto"``, ``"cpu"``, or ``"cuda"``.
-        compute_type: ``"auto"``, ``"int8"`` (good for CPU), ``"float16"`` (GPU).
-        language: ISO 639-1 code; ``"no"`` covers Norwegian bokmaal.
-        beam_size: Beam width for decoding. Higher is slower but more accurate.
-        vad_filter: Drop non-speech audio before decoding to reduce hallucination.
+       Attributes:
+           model_size: Whisper model identifier, e.g. ``"large-v3"``, ``"medium"``.
+           device: ``"auto"``, ``"cpu"``, or ``"cuda"``.
+           compute_type: ``"auto"``, ``"int8"`` (good for CPU), ``"float16"`` (GPU).
+           language: ISO 639-1 code; ``"no"`` covers Norwegian bokmaal.
+           beam_size: Beam width for decoding. Higher is slower but more accurate.
+           vad_filter: Drop non-speech audio before decoding to reduce hallucination.
     """
 
     model_size: str = 'large-v3'
@@ -66,10 +66,10 @@ class TranscriptionConfig:
 class SpeakerTurn:
     """A contiguous span of audio attributed to one speaker by diarization.
 
-    Attributes:
-        start: Turn start time in seconds.
-        end: Turn end time in seconds.
-        speaker: Diarization label, e.g. ``"SPEAKER_00"``.
+       Attributes:
+           start: Turn start time in seconds.
+           end: Turn end time in seconds.
+           speaker: Diarization label, e.g. ``"SPEAKER_00"``.
     """
 
     start: float
@@ -81,11 +81,11 @@ class SpeakerTurn:
 class LabeledSegment:
     """A transcription segment annotated with a speaker label.
 
-    Attributes:
-        start: Segment start time in seconds.
-        end: Segment end time in seconds.
-        text: The transcribed text (unmodified).
-        speaker: The speaker label assigned by :func:`assign_speakers`.
+       Attributes:
+           start: Segment start time in seconds.
+           end: Segment end time in seconds.
+           text: The transcribed text (unmodified).
+           speaker: The speaker label assigned by :func:`assign_speakers`.
     """
 
     start: float
@@ -97,16 +97,16 @@ class LabeledSegment:
 def format_timestamp(seconds: float, *, use_comma: bool = False) -> str:
     """Format a duration in seconds as ``HH:MM:SS.mmm``.
 
-    Args:
-        seconds: Non-negative duration in seconds.
-        use_comma: Use a comma as the millisecond separator (SRT convention)
-            instead of a period.
+       Args:
+           seconds: Non-negative duration in seconds.
+           use_comma: Use a comma as the millisecond separator (SRT convention)
+               instead of a period.
 
-    Returns:
-        A zero-padded timestamp string.
+       Returns:
+           A zero-padded timestamp string.
 
-    Raises:
-        ValueError: If ``seconds`` is negative.
+       Raises:
+           ValueError: If ``seconds`` is negative.
     """
     if seconds < 0:
         raise ValueError('seconds must be non-negative')
@@ -119,20 +119,21 @@ def format_timestamp(seconds: float, *, use_comma: bool = False) -> str:
 
 
 def _clock(seconds: float) -> str:
-    """Format ``seconds`` as a bare ``HH:MM:SS`` clock (no milliseconds)."""
+    """Format ``seconds`` as a bare ``HH:MM:SS`` clock (no milliseconds).
+    """
     return format_timestamp(seconds)[:8]
 
 
 def _add_cuda_dll_directories() -> None:
     """Make pip-installed NVIDIA CUDA libraries loadable on Windows.
 
-    ctranslate2 (faster-whisper's backend) loads cuBLAS and cuDNN at runtime
-    when a CUDA device is used. When those libraries come from the
-    ``nvidia-cublas-cu12`` / ``nvidia-cudnn-cu12`` wheels rather than a
-    system-wide CUDA install, their DLLs live under ``site-packages/nvidia``
-    and Windows will not find them unless the containing directories are
-    registered on the DLL search path. This is a no-op on non-Windows
-    platforms and when the wheels are not installed.
+       ctranslate2 (faster-whisper's backend) loads cuBLAS and cuDNN at runtime
+       when a CUDA device is used. When those libraries come from the
+       ``nvidia-cublas-cu12`` / ``nvidia-cudnn-cu12`` wheels rather than a
+       system-wide CUDA install, their DLLs live under ``site-packages/nvidia``
+       and Windows will not find them unless the containing directories are
+       registered on the DLL search path. This is a no-op on non-Windows
+       platforms and when the wheels are not installed.
     """
     if sys.platform != 'win32':
         return
@@ -165,12 +166,12 @@ def _add_cuda_dll_directories() -> None:
 def _add_ffmpeg_dll_directory() -> None:
     """Make a shared-build FFmpeg discoverable for pyannote's torchcodec backend.
 
-    pyannote.audio decodes audio through torchcodec, which loads FFmpeg's shared
-    DLLs (``avcodec``/``avformat``/``avutil``/...) at runtime. When FFmpeg is not
-    already on ``PATH``, set the ``FFMPEG_BIN`` environment variable (e.g. in
-    ``.env``) to its ``bin`` directory and this registers it on the DLL search
-    path. No-op on non-Windows platforms and when ``FFMPEG_BIN`` is unset or does
-    not point at a directory.
+       pyannote.audio decodes audio through torchcodec, which loads FFmpeg's shared
+       DLLs (``avcodec``/``avformat``/``avutil``/...) at runtime. When FFmpeg is not
+       already on ``PATH``, set the ``FFMPEG_BIN`` environment variable (e.g. in
+       ``.env``) to its ``bin`` directory and this registers it on the DLL search
+       path. No-op on non-Windows platforms and when ``FFMPEG_BIN`` is unset or does
+       not point at a directory.
     """
     if sys.platform != 'win32':
         return
@@ -190,7 +191,7 @@ def segments_to_text(
 ) -> str:
     """Join segment texts into a newline-separated plain-text transcript.
 
-    With ``timestamps``, each line is prefixed with a ``[HH:MM:SS]`` start time.
+       With ``timestamps``, each line is prefixed with a ``[HH:MM:SS]`` start time.
     """
     lines = []
     for segment in segments:
@@ -200,7 +201,8 @@ def segments_to_text(
 
 
 def segments_to_srt(segments: Iterable[Segment]) -> str:
-    """Render segments as an SRT subtitle document."""
+    """Render segments as an SRT subtitle document.
+    """
     blocks = []
     for index, segment in enumerate(segments, start=1):
         start = format_timestamp(segment.start, use_comma=True)
@@ -212,9 +214,9 @@ def segments_to_srt(segments: Iterable[Segment]) -> str:
 def _best_speaker(segment: Segment, turns: Iterable[SpeakerTurn]) -> str:
     """Return the speaker whose turns overlap ``segment`` the most.
 
-    Overlap is summed across all turns for each speaker, so a segment that
-    straddles two short turns by the same speaker is attributed correctly.
-    Returns ``"UNKNOWN"`` when no turn overlaps the segment.
+       Overlap is summed across all turns for each speaker, so a segment that
+       straddles two short turns by the same speaker is attributed correctly.
+       Returns ``"UNKNOWN"`` when no turn overlaps the segment.
     """
     overlap_by_speaker: dict[str, float] = {}
     for turn in turns:
@@ -236,15 +238,15 @@ def assign_speakers(
 ) -> list[LabeledSegment]:
     """Attach a speaker label to each transcription segment.
 
-    Pure function: it only needs the start/end times of ``segments`` and
-    ``turns``, so it is unit-testable without faster-whisper or pyannote.
+       Pure function: it only needs the start/end times of ``segments`` and
+       ``turns``, so it is unit-testable without faster-whisper or pyannote.
 
-    Args:
-        segments: Transcription segments, in time order.
-        turns: Diarization turns from :func:`diarize`.
+       Args:
+           segments: Transcription segments, in time order.
+           turns: Diarization turns from :func:`diarize`.
 
-    Returns:
-        One :class:`LabeledSegment` per input segment, preserving order.
+       Returns:
+           One :class:`LabeledSegment` per input segment, preserving order.
     """
     turns = list(turns)
     return [
@@ -263,10 +265,10 @@ def merge_consecutive_speakers(
 ) -> list[LabeledSegment]:
     """Merge consecutive same-speaker labeled segments into one block each.
 
-    Pure. Each returned :class:`LabeledSegment` spans one speaker's run of
-    consecutive turns: ``start``/``end`` cover the run and ``text`` is the
-    turns joined with a space. This turns one-line-per-segment output into
-    readable per-speaker paragraphs.
+       Pure. Each returned :class:`LabeledSegment` spans one speaker's run of
+       consecutive turns: ``start``/``end`` cover the run and ``text`` is the
+       turns joined with a space. This turns one-line-per-segment output into
+       readable per-speaker paragraphs.
     """
     merged: list[LabeledSegment] = []
     for segment in segments:
@@ -297,7 +299,7 @@ def labeled_segments_to_text(
 ) -> str:
     """Render labeled segments as ``SPEAKER: text`` lines.
 
-    With ``timestamps``, each line is prefixed with a ``[HH:MM:SS]`` start time.
+       With ``timestamps``, each line is prefixed with a ``[HH:MM:SS]`` start time.
     """
     lines = []
     for segment in segments:
@@ -307,7 +309,8 @@ def labeled_segments_to_text(
 
 
 def labeled_segments_to_srt(segments: Iterable[LabeledSegment]) -> str:
-    """Render labeled segments as SRT, prefixing each cue with the speaker."""
+    """Render labeled segments as SRT, prefixing each cue with the speaker.
+    """
     blocks = []
     for index, segment in enumerate(segments, start=1):
         start = format_timestamp(segment.start, use_comma=True)
@@ -323,18 +326,18 @@ def transcribe(
 ) -> tuple[list[Segment], object]:
     """Transcribe an audio file to a list of segments.
 
-    The ``faster_whisper`` import is deferred to here so the formatting helpers
-    above can be imported (and unit-tested) without the dependency installed.
+       The ``faster_whisper`` import is deferred to here so the formatting helpers
+       above can be imported (and unit-tested) without the dependency installed.
 
-    Args:
-        audio_path: Path to an audio or video file readable by ffmpeg.
-        config: Transcription settings; defaults to :class:`TranscriptionConfig`.
+       Args:
+           audio_path: Path to an audio or video file readable by ffmpeg.
+           config: Transcription settings; defaults to :class:`TranscriptionConfig`.
 
-    Returns:
-        A tuple of (materialized segment list, info object from the model).
+       Returns:
+           A tuple of (materialized segment list, info object from the model).
 
-    Raises:
-        FileNotFoundError: If ``audio_path`` does not exist.
+       Raises:
+           FileNotFoundError: If ``audio_path`` does not exist.
     """
     if not audio_path.exists():
         raise FileNotFoundError(audio_path)
@@ -365,15 +368,15 @@ DIARIZATION_MODEL = 'pyannote/speaker-diarization-3.1'
 def _choose_diarization_device(requested: str, cuda_available: bool) -> str:
     """Resolve the diarization torch device from the ``--device`` choice.
 
-    Pure (imports no torch) so it stays unit-testable. Returns ``'cuda'`` or
-    ``'cpu'``.
+       Pure (imports no torch) so it stays unit-testable. Returns ``'cuda'`` or
+       ``'cpu'``.
 
-    Args:
-        requested: ``'auto'``, ``'cpu'``, or ``'cuda'``.
-        cuda_available: Whether the installed torch reports CUDA support.
+       Args:
+           requested: ``'auto'``, ``'cpu'``, or ``'cuda'``.
+           cuda_available: Whether the installed torch reports CUDA support.
 
-    Raises:
-        RuntimeError: If ``'cuda'`` is requested but not available.
+       Raises:
+           RuntimeError: If ``'cuda'`` is requested but not available.
     """
     if requested == 'cpu':
         return 'cpu'
@@ -398,11 +401,11 @@ def _build_diarization_pipeline(
 ):
     """Load the pyannote diarization pipeline on the chosen device.
 
-    Resolves the Hugging Face token from ``hf_token`` or the environment, and
-    raises a clear error if none is set. ``device`` is ``'auto'`` (GPU when a
-    CUDA torch is available, else CPU), ``'cpu'``, or ``'cuda'``. Factored out
-    so :func:`diarize` and :func:`prime` construct (and thus download) the
-    pipeline the same way.
+       Resolves the Hugging Face token from ``hf_token`` or the environment, and
+       raises a clear error if none is set. ``device`` is ``'auto'`` (GPU when a
+       CUDA torch is available, else CPU), ``'cpu'``, or ``'cuda'``. Factored out
+       so :func:`diarize` and :func:`prime` construct (and thus download) the
+       pipeline the same way.
     """
     token = (
         hf_token
@@ -449,30 +452,30 @@ def diarize(
 ) -> list[SpeakerTurn]:
     """Detect who-spoke-when with a pyannote.audio diarization pipeline.
 
-    Like :func:`transcribe`, the heavy import is deferred so the rest of the
-    module (and its tests) work without pyannote or torch installed.
+       Like :func:`transcribe`, the heavy import is deferred so the rest of the
+       module (and its tests) work without pyannote or torch installed.
 
-    The ``pyannote/speaker-diarization-3.1`` model is gated on the Hugging Face
-    Hub: you must accept its conditions once at
-    https://hf.co/pyannote/speaker-diarization-3.1 and supply an access token,
-    either via ``hf_token`` or the ``HF_TOKEN`` / ``HUGGINGFACE_TOKEN``
-    environment variable.
+       The ``pyannote/speaker-diarization-3.1`` model is gated on the Hugging Face
+       Hub: you must accept its conditions once at
+       https://hf.co/pyannote/speaker-diarization-3.1 and supply an access token,
+       either via ``hf_token`` or the ``HF_TOKEN`` / ``HUGGINGFACE_TOKEN``
+       environment variable.
 
-    Args:
-        audio_path: Path to an audio or video file readable by the pipeline.
-        hf_token: Hugging Face access token; falls back to the environment.
-        num_speakers: Exact number of speakers, if known. ``None`` lets the
-            pipeline estimate it.
-        device: ``'auto'`` (GPU when a CUDA torch is available, else CPU),
-            ``'cpu'``, or ``'cuda'``.
+       Args:
+           audio_path: Path to an audio or video file readable by the pipeline.
+           hf_token: Hugging Face access token; falls back to the environment.
+           num_speakers: Exact number of speakers, if known. ``None`` lets the
+               pipeline estimate it.
+           device: ``'auto'`` (GPU when a CUDA torch is available, else CPU),
+               ``'cpu'``, or ``'cuda'``.
 
-    Returns:
-        Speaker turns sorted by start time.
+       Returns:
+           Speaker turns sorted by start time.
 
-    Raises:
-        FileNotFoundError: If ``audio_path`` does not exist.
-        RuntimeError: If no Hugging Face token can be found, or ``device`` is
-            ``'cuda'`` but the installed torch has no CUDA support.
+       Raises:
+           FileNotFoundError: If ``audio_path`` does not exist.
+           RuntimeError: If no Hugging Face token can be found, or ``device`` is
+               ``'cuda'`` but the installed torch has no CUDA support.
     """
     if not audio_path.exists():
         raise FileNotFoundError(audio_path)
@@ -512,9 +515,9 @@ def prime(
 ) -> None:
     """Download and cache the model files so the first real run is fast.
 
-    Loads the configured Whisper model (which downloads its weights on first
-    use) and, when ``diarize`` is true, the pyannote diarization pipeline.
-    Nothing is transcribed; this only warms the on-disk model cache.
+       Loads the configured Whisper model (which downloads its weights on first
+       use) and, when ``diarize`` is true, the pyannote diarization pipeline.
+       Nothing is transcribed; this only warms the on-disk model cache.
     """
     config = config or TranscriptionConfig()
 
@@ -544,11 +547,11 @@ def _write_outputs(
 ) -> list[Path]:
     """Write the requested transcript formats and return the paths written.
 
-    When ``diarized`` is true, ``segments`` are :class:`LabeledSegment` values:
-    the ``.txt`` merges consecutive same-speaker turns into per-speaker
-    paragraphs, while the ``.srt`` keeps one cue per segment (subtitles need
-    fine-grained timing). ``timestamps`` prefixes each ``.txt`` line with a
-    ``[HH:MM:SS]`` start time.
+       When ``diarized`` is true, ``segments`` are :class:`LabeledSegment` values:
+       the ``.txt`` merges consecutive same-speaker turns into per-speaker
+       paragraphs, while the ``.srt`` keeps one cue per segment (subtitles need
+       fine-grained timing). ``timestamps`` prefixes each ``.txt`` line with a
+       ``[HH:MM:SS]`` start time.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -633,11 +636,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def _load_dotenv(path: Path = Path('.env')) -> None:
     """Populate ``os.environ`` from a ``.env`` file, if one is present.
 
-    Lines are ``KEY=value`` (an optional ``export`` prefix is allowed); blank
-    lines and ``#`` comments are skipped, and surrounding quotes are stripped.
-    Existing environment variables win, so a value exported in the shell takes
-    precedence over the file. This avoids a python-dotenv dependency for the
-    one common case: keeping HF_TOKEN out of your shell history and the repo.
+       Lines are ``KEY=value`` (an optional ``export`` prefix is allowed); blank
+       lines and ``#`` comments are skipped, and surrounding quotes are stripped.
+       Existing environment variables win, so a value exported in the shell takes
+       precedence over the file. This avoids a python-dotenv dependency for the
+       one common case: keeping HF_TOKEN out of your shell history and the repo.
     """
     if not path.is_file():
         return
@@ -660,7 +663,8 @@ def _load_dotenv(path: Path = Path('.env')) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point. Returns a process exit code."""
+    """CLI entry point. Returns a process exit code.
+    """
     _load_dotenv()
     args = _parse_args(argv)
     config = TranscriptionConfig(
