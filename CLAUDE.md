@@ -22,7 +22,7 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe transcribe_meeting.py --prime --model large-v3 --diarize   # pre-download model weights, no audio
 ```
 
-There is no build step, linter, or CI configured. Style follows `e:/srv/STYLEGUIDE.md` (referenced from the user's global config): `snake_case` functions/vars, `PascalCase` classes, 4-space indent, lines ≤79 (up to 100 when needed). New string literals use single quotes; the original code uses double quotes, so the module is intentionally mixed — use single quotes in new code and don't reflow existing quotes.
+There is no build step, linter, or CI configured. Style conventions: `snake_case` functions/vars, `PascalCase` classes, `UPPER_SNAKE_CASE` constants, 4-space indent, lines ≤79 (up to 100 when needed). Strings use **single quotes** — keep double only when a string contains an apostrophe; docstrings use triple double-quotes (`"""`).
 
 ## Architecture
 
@@ -53,3 +53,7 @@ When adding behavior, put the logic in a pure helper and unit-test it; only the 
 The pyannote model is gated: a Hugging Face token (read scope) must have accepted terms for **both** `pyannote/speaker-diarization-3.1` **and** its dependency `pyannote/segmentation-3.0`.
 
 `.venv/`, `.env`, audio media, and `transcripts/`/`*.srt` are gitignored — regenerating outputs into `transcripts/` is normal and won't be committed.
+
+## Line endings
+
+`.gitattributes` normalizes line endings to **LF** (`* text=auto eol=lf`, with `eol=crlf` for `*.bat`/`*.cmd`/`*.ps1` and `binary` for audio formats). This intentionally overrides a global `core.autocrlf=true`, so expect LF in the working tree and don't "fix" it — without this, Git warns about LF↔CRLF conversion on every commit on Windows.

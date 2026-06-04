@@ -54,10 +54,10 @@ class TranscriptionConfig:
         vad_filter: Drop non-speech audio before decoding to reduce hallucination.
     """
 
-    model_size: str = "large-v3"
-    device: str = "auto"
-    compute_type: str = "auto"
-    language: str = "no"
+    model_size: str = 'large-v3'
+    device: str = 'auto'
+    compute_type: str = 'auto'
+    language: str = 'no'
     beam_size: int = 5
     vad_filter: bool = True
 
@@ -109,13 +109,13 @@ def format_timestamp(seconds: float, *, use_comma: bool = False) -> str:
         ValueError: If ``seconds`` is negative.
     """
     if seconds < 0:
-        raise ValueError("seconds must be non-negative")
+        raise ValueError('seconds must be non-negative')
     milliseconds = round(seconds * 1000)
     hours, milliseconds = divmod(milliseconds, 3_600_000)
     minutes, milliseconds = divmod(milliseconds, 60_000)
     secs, milliseconds = divmod(milliseconds, 1_000)
-    separator = "," if use_comma else "."
-    return f"{hours:02d}:{minutes:02d}:{secs:02d}{separator}{milliseconds:03d}"
+    separator = ',' if use_comma else '.'
+    return f'{hours:02d}:{minutes:02d}:{secs:02d}{separator}{milliseconds:03d}'
 
 
 def _clock(seconds: float) -> str:
@@ -194,9 +194,9 @@ def segments_to_text(
     """
     lines = []
     for segment in segments:
-        prefix = f"[{_clock(segment.start)}] " if timestamps else ""
-        lines.append(f"{prefix}{segment.text.strip()}")
-    return "\n".join(lines)
+        prefix = f'[{_clock(segment.start)}] ' if timestamps else ''
+        lines.append(f'{prefix}{segment.text.strip()}')
+    return '\n'.join(lines)
 
 
 def segments_to_srt(segments: Iterable[Segment]) -> str:
@@ -205,8 +205,8 @@ def segments_to_srt(segments: Iterable[Segment]) -> str:
     for index, segment in enumerate(segments, start=1):
         start = format_timestamp(segment.start, use_comma=True)
         end = format_timestamp(segment.end, use_comma=True)
-        blocks.append(f"{index}\n{start} --> {end}\n{segment.text.strip()}\n")
-    return "\n".join(blocks)
+        blocks.append(f'{index}\n{start} --> {end}\n{segment.text.strip()}\n')
+    return '\n'.join(blocks)
 
 
 def _best_speaker(segment: Segment, turns: Iterable[SpeakerTurn]) -> str:
@@ -553,50 +553,50 @@ def _write_outputs(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     written: list[Path] = []
-    if fmt in {"txt", "both"}:
+    if fmt in {'txt', 'both'}:
         if diarized:
             text = labeled_segments_to_text(
                 merge_consecutive_speakers(segments), timestamps=timestamps
             )
         else:
             text = segments_to_text(segments, timestamps=timestamps)
-        txt_path = output_dir / f"{stem}.txt"
-        txt_path.write_text(text, encoding="utf-8")
+        txt_path = output_dir / f'{stem}.txt'
+        txt_path.write_text(text, encoding='utf-8')
         written.append(txt_path)
-    if fmt in {"srt", "both"}:
+    if fmt in {'srt', 'both'}:
         if diarized:
             srt = labeled_segments_to_srt(segments)
         else:
             srt = segments_to_srt(segments)
-        srt_path = output_dir / f"{stem}.srt"
-        srt_path.write_text(srt, encoding="utf-8")
+        srt_path = output_dir / f'{stem}.srt'
+        srt_path.write_text(srt, encoding='utf-8')
         written.append(srt_path)
     return written
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Transcribe a Norwegian meeting recording locally.",
+        description='Transcribe a Norwegian meeting recording locally.',
     )
     parser.add_argument(
-        "audio",
+        'audio',
         type=Path,
-        nargs="?",
+        nargs='?',
         default=None,
-        help="Path to the audio/video file (omit when using --prime).",
+        help='Path to the audio/video file (omit when using --prime).',
     )
-    parser.add_argument("--model", default="large-v3", help="Whisper model size.")
-    parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
-    parser.add_argument("--compute-type", default="auto")
-    parser.add_argument("--language", default="no", help="ISO 639-1 language code.")
+    parser.add_argument('--model', default='large-v3', help='Whisper model size.')
+    parser.add_argument('--device', default='auto', choices=['auto', 'cpu', 'cuda'])
+    parser.add_argument('--compute-type', default='auto')
+    parser.add_argument('--language', default='no', help='ISO 639-1 language code.')
     parser.add_argument(
-        "--format",
-        default="txt",
-        choices=["txt", "srt", "both"],
-        help="Output format(s).",
+        '--format',
+        default='txt',
+        choices=['txt', 'srt', 'both'],
+        help='Output format(s).',
     )
     parser.add_argument(
-        "--output",
+        '--output',
         type=Path,
         default=None,
         help="Output directory (defaults to the input file's directory).",
@@ -674,26 +674,26 @@ def main(argv: list[str] | None = None) -> int:
         try:
             prime(config, diarize=args.diarize, hf_token=args.hf_token)
         except RuntimeError as error:
-            print(f"error: {error}", file=sys.stderr)
+            print(f'error: {error}', file=sys.stderr)
             return 1
-        print("primed: model files are downloaded and cached")
+        print('primed: model files are downloaded and cached')
         return 0
 
     if args.audio is None:
-        print("error: an audio file is required (or use --prime)",
+        print('error: an audio file is required (or use --prime)',
               file=sys.stderr)
         return 2
 
     try:
         segments, info = transcribe(args.audio, config)
     except FileNotFoundError:
-        print(f"error: file not found: {args.audio}", file=sys.stderr)
+        print(f'error: file not found: {args.audio}', file=sys.stderr)
         return 1
 
-    detected = getattr(info, "language", config.language)
-    probability = getattr(info, "language_probability", None)
+    detected = getattr(info, 'language', config.language)
+    probability = getattr(info, 'language_probability', None)
     if probability is not None:
-        print(f"detected language: {detected} ({probability:.0%})", file=sys.stderr)
+        print(f'detected language: {detected} ({probability:.0%})', file=sys.stderr)
 
     output_dir = args.output or args.audio.parent
 
@@ -706,11 +706,11 @@ def main(argv: list[str] | None = None) -> int:
                 device=args.device,
             )
         except RuntimeError as error:
-            print(f"error: {error}", file=sys.stderr)
+            print(f'error: {error}', file=sys.stderr)
             return 1
 
         speakers = {turn.speaker for turn in turns}
-        print(f"diarized {len(turns)} turns, {len(speakers)} speakers",
+        print(f'diarized {len(turns)} turns, {len(speakers)} speakers',
               file=sys.stderr)
         segments = assign_speakers(segments, turns)
 
@@ -723,9 +723,9 @@ def main(argv: list[str] | None = None) -> int:
         timestamps=args.timestamps,
     )
     for path in written:
-        print(f"wrote {path}")
+        print(f'wrote {path}')
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     raise SystemExit(main())

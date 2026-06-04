@@ -1,3 +1,6 @@
+# Internal style guide — kept locally for reference, not published.
+/STYLEGUIDE.md
+
 # Secrets / local environment — never commit the real Hugging Face token.
 .env
 .env.*
